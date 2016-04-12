@@ -44,6 +44,7 @@
 #include <linux/kallsyms.h>
 #include <linux/version.h>
 #include <linux/string.h>
+#include <linux/debugfs.h>
 #include <linux/stacktrace.h>
 #include <asm/stacktrace.h>
 #include <asm/cacheflush.h>
@@ -61,6 +62,14 @@
 	!defined(CONFIG_KALLSYMS_ALL)
 #error "CONFIG_FUNCTION_TRACER, CONFIG_HAVE_FENTRY, CONFIG_MODULES, CONFIG_SYSFS, CONFIG_KALLSYMS_ALL kernel config options are required"
 #endif
+
+/* A limited fault injection support, for testing */
+static struct dentry *debugfs_dir_dentry = NULL;
+static const char *debugfs_dir_name = "kpatch";
+static struct dentry *fail_apply_file = NULL;
+static struct dentry *fail_remove_file = NULL;
+static u8 fail_apply = 0;
+static u8 fail_remove = 0;
 
 #define KPATCH_HASH_BITS 8
 static DEFINE_HASHTABLE(kpatch_func_hash, KPATCH_HASH_BITS);
@@ -315,6 +324,10 @@ static int kpatch_apply_patch(void *data)
 	int ret;
 
 	ret = kpatch_verify_activeness_safety(kpmod);
+	/* for testing */
+	if (fail_apply)
+		ret = -EBUSY;
+
 	if (ret) {
 		kpatch_state_finish(KPATCH_STATE_FAILURE);
 		return ret;
@@ -366,6 +379,9 @@ static int kpatch_remove_patch(void *data)
 	int ret;
 
 	ret = kpatch_verify_activeness_safety(kpmod);
+	if (fail_remove)
+		ret = -EBUSY;
+
 	if (ret) {
 		kpatch_state_finish(KPATCH_STATE_FAILURE);
 		return ret;
@@ -1080,6 +1096,42 @@ static struct notifier_block kpatch_module_nb = {
 	.priority = INT_MIN, /* called last */
 };
 
+static void remove_debugfs_files(void)
+{
+	if (fail_apply_file)
+		debugfs_remove(fail_apply_file);
+	if (fail_remove_file)
+		debugfs_remove(fail_remove_file);
+}
+
+static int create_debugfs_files(void)
+{
+	int ret;
+
+	fail_apply_file = debugfs_create_u8(
+		"fail_apply", S_IRUGO | S_IWUGO, debugfs_dir_dentry,
+		&fail_apply);
+	if (!fail_apply_file) {
+		pr_err("unable to create file 'fail_apply' in debugfs\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	fail_remove_file = debugfs_create_u8(
+		"fail_remove", S_IRUGO | S_IWUGO, debugfs_dir_dentry,
+		&fail_remove);
+	if (!fail_remove_file) {
+		pr_err("unable to create file 'fail_remove' in debugfs\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	return 0;
+err:
+	remove_debugfs_files();
+	return ret;
+}
+
 static int kpatch_init(void)
 {
 	int ret;
@@ -1096,9 +1148,21 @@ static int kpatch_init(void)
 		return -ENXIO;
 	}
 
-	kpatch_root_kobj = kobject_create_and_add("kpatch", kernel_kobj);
-	if (!kpatch_root_kobj)
+	debugfs_dir_dentry = debugfs_create_dir(debugfs_dir_name, NULL);
+	if (!debugfs_dir_dentry) {
+		pr_err("unable to create a directory in debugfs\n");
 		return -ENOMEM;
+	}
+
+	ret = create_debugfs_files();
+	if (ret)
+		goto err_debugfs_dir;
+
+	kpatch_root_kobj = kobject_create_and_add("kpatch", kernel_kobj);
+	if (!kpatch_root_kobj) {
+		ret = -ENOMEM;
+		goto err_debugfs_files;
+	}
 
 	ret = register_module_notifier(&kpatch_module_nb);
 	if (ret)
@@ -1108,6 +1172,10 @@ static int kpatch_init(void)
 
 err_root_kobj:
 	kobject_put(kpatch_root_kobj);
+err_debugfs_files:
+	remove_debugfs_files();
+err_debugfs_dir:
+	debugfs_remove(debugfs_dir_dentry);
 	return ret;
 }
 
@@ -1118,6 +1186,8 @@ static void kpatch_exit(void)
 	WARN_ON(kpatch_num_patched != 0);
 	WARN_ON(unregister_module_notifier(&kpatch_module_nb));
 	kobject_put(kpatch_root_kobj);
+	remove_debugfs_files();
+	debugfs_remove(debugfs_dir_dentry);
 }
 
 module_init(kpatch_init);
