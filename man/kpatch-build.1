@@ -46,6 +46,15 @@ to work on other distros.
 -o|--output
    Specify output folder
 
+-f|--patch-format
+   Generate patch in the given format (e.g. "kpatch").
+   By default, kpatch-build generates the patch module in the
+   Livepatch-compatible format if CONFIG_LIVEPATCH is enabled
+   in the kernel configuration. The KPatch format is used otherwise.
+   If kpatch-build is called with "--patch-format=kpatch", it
+   will generate a KPatch-compatible patch module even if Livepatch
+   is enabled in the kernel.
+
 -d|--debug
    Keep scratch files in /tmp
    (can be specified multiple times)

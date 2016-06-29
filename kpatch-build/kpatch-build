@@ -52,6 +52,7 @@ SKIPGCCCHECK=0
 ARCH_KCFLAGS=""
 declare -a PATCH_LIST
 APPLIED_PATCHES=0
+KPATCH_PATCH_FORMAT="default"
 
 [[ -z "$KPATCH_ABI_COMPATIBLE" ]] && KPATCH_ABI_COMPATIBLE=default
 
@@ -380,6 +381,7 @@ usage() {
 	echo "		-v, --vmlinux      Specify original vmlinux" >&2
 	echo "		-j, --jobs         Specify the number of make jobs" >&2
 	echo "		-t, --target       Specify custom kernel build targets" >&2
+	echo "		-f, --patch-format Generate patch in the given format (e.g. \"kpatch\")" >&2
 	echo "		-n, --name         Specify the name of the kpatch module" >&2
 	echo "		-o, --output       Specify output folder" >&2
 	echo "		-d, --debug        Enable 'xtrace' and keep scratch files" >&2
@@ -390,7 +392,7 @@ usage() {
 	echo "		                   (not recommended)" >&2
 }
 
-options="$(getopt -o ha:r:s:c:v:j:t:n:o:d -l "help,archversion:,sourcerpm:,sourcedir:,config:,vmlinux:,jobs:,target:,name:,output:,debug,skip-gcc-check,skip-cleanup" -- "$@")" || die "getopt failed"
+options="$(getopt -o ha:r:s:c:v:j:t:f:n:o:d -l "help,archversion:,sourcerpm:,sourcedir:,config:,vmlinux:,jobs:,target:,patch-format:,name:,output:,debug,skip-gcc-check,skip-cleanup" -- "$@")" || die "getopt failed"
 
 eval set -- "$options"
 
@@ -440,6 +442,10 @@ while [[ $# -gt 0 ]]; do
 	-o|--output)
 		[[ ! -d "$2" ]] && die "output dir '$2' not found"
 		BASE="$(readlink -f "$2")"
+		shift
+		;;
+	-f|--patch-format)
+		KPATCH_PATCH_FORMAT="$2"
 		shift
 		;;
 	-d|--debug)
@@ -665,8 +671,8 @@ KPATCH_MODULE=true
 
 # kernel option checking
 grep -q "CONFIG_DEBUG_INFO=y" "$CONFIGFILE" || die "kernel doesn't have 'CONFIG_DEBUG_INFO' enabled"
-if grep -q "CONFIG_LIVEPATCH=y" "$CONFIGFILE"; then
-	# The kernel supports livepatch.
+if grep -q "CONFIG_LIVEPATCH=y" "$CONFIGFILE" && [[ "$KPATCH_PATCH_FORMAT" != "kpatch" ]]; then
+	# Livepatch-compatible patch will be created. No symvers file is needed.
 	if version_gte "${ARCHVERSION//-*/}" 4.7.0 || is_rhel "$ARCHVERSION"; then
 		# Use new .klp.rela. sections
 		KPATCH_MODULE=false
@@ -675,7 +681,7 @@ if grep -q "CONFIG_LIVEPATCH=y" "$CONFIGFILE"; then
 		fi
 	fi
 else
-	# No support for livepatch in the kernel. Kpatch core module is needed.
+	# Kpatch-compatible patch will be created. Kpatch core module is needed.
 	find_core_symvers || die "unable to find Module.symvers for kpatch core module"
 	KBUILD_EXTRA_SYMBOLS="$SYMVERSFILE"
 fi
@@ -855,6 +861,7 @@ KPATCH_BUILD="$SRCDIR" KPATCH_NAME="$MODNAME" \
 KBUILD_EXTRA_SYMBOLS="$KBUILD_EXTRA_SYMBOLS" \
 KPATCH_LDFLAGS="$KPATCH_LDFLAGS" \
 KPATCH_ABI_COMPATIBLE="$KPATCH_ABI_COMPATIBLE" \
+KPATCH_PATCH_FORMAT="$KPATCH_PATCH_FORMAT" \
 	make 2>&1 | logger || die
 
 if ! "$KPATCH_MODULE"; then

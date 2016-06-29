@@ -23,7 +23,14 @@ endif
 
 obj-m += $(KPATCH_NAME).o
 
-$(KPATCH_NAME)-objs += patch-hook.o kpatch.lds output.o
+KPATCH_PATCH_FORMAT ?= "default"
+ifeq ("$(KPATCH_PATCH_FORMAT)", "kpatch")
+	KPATCH_HOOK_OBJ := kpatch-patch-hook.o
+else
+	KPATCH_HOOK_OBJ := patch-hook.o
+endif
+
+$(KPATCH_NAME)-objs += $(KPATCH_HOOK_OBJ) kpatch.lds output.o
 
 all: $(KPATCH_NAME).ko
 
@@ -35,6 +42,9 @@ $(KPATCH_NAME).ko:
 
 patch-hook.o: patch-hook.c kpatch-patch-hook.c livepatch-patch-hook.c
 	$(KPATCH_MAKE) patch-hook.o
+
+kpatch-patch-hook.o: kpatch-patch-hook.c
+	$(KPATCH_MAKE) kpatch-patch-hook.o
 
 clean:
 	$(RM) -Rf .*.o.cmd .*.ko.cmd .tmp_versions *.o *.ko *.mod.c \
