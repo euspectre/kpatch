@@ -486,6 +486,7 @@ if [[ -n "$SRCRPM" ]]; then
 	rpmname="$(basename "$SRCRPM")"
 	ARCHVERSION="${rpmname%.src.rpm}.$(uname -m)"
 	ARCHVERSION="${ARCHVERSION#kernel-}"
+	ARCHVERSION=${ARCHVERSION#vzkernel-}
 fi
 
 # ensure cachedir and tempdir are setup properly and cleaned
@@ -529,6 +530,13 @@ if [[ "$DISTRO" = fedora ]] || [[ "$DISTRO" = rhel ]] || [[ "$DISTRO" = ol ]] ||
 
 	export PATH="/usr/lib64/ccache:$PATH"
 
+elif [[ "$DISTRO" = virtuozzo ]] || [[ "$DISTRO" = cloudlinux ]]; then
+	KREL=${ARCHVERSION##*-}
+	[[ -z "$VMLINUX" ]] && VMLINUX="/usr/lib/debug/lib/modules/${ARCHVERSION}/vmlinux"
+	[[ -e "$VMLINUX" ]] || die "vzkernel-debuginfo-$ARCHVERSION is not installed"
+
+	export PATH=/usr/lib64/ccache:$PATH
+
 elif [[ "$DISTRO" = ubuntu ]] || [[ "$DISTRO" = debian ]]; then
 	[[ -z "$VMLINUX" ]] && VMLINUX="/usr/lib/debug/boot/vmlinux-$ARCHVERSION"
 
@@ -558,7 +566,8 @@ elif [[ -e "$SRCDIR"/.config ]] && [[ -e "$VERSIONFILE" ]] && [[ "$(cat "$VERSIO
 	echo "Using cache at $SRCDIR"
 
 else
-	if [[ "$DISTRO" = fedora ]] || [[ "$DISTRO" = rhel ]] || [[ "$DISTRO" = ol ]] || [[ "$DISTRO" = centos ]]; then
+	if [[ $DISTRO = fedora ]] || [[ $DISTRO = rhel ]] || [[ $DISTRO = ol ]] || [[ $DISTRO = centos ]] || \
+		[[ $DISTRO = virtuozzo ]] || [[ $DISTRO = cloudlinux ]]; then
 
 		echo "Fedora/Red Hat distribution detected"
 		rpm -q --quiet rpmdevtools || die "rpmdevtools not installed"
@@ -582,7 +591,13 @@ else
 		rpmbuild -D "_topdir $RPMTOPDIR" -bp "--target=$(uname -m)" "$RPMTOPDIR"/SPECS/kernel.spec 2>&1 | logger ||
 			die "rpmbuild -bp failed.  you may need to run 'yum-builddep kernel' first."
 
-		mv "$RPMTOPDIR"/BUILD/kernel-*/linux-"${ARCHVERSION%.*}"*"${ARCHVERSION##*.}" "$SRCDIR" 2>&1 | logger || die
+		SOURCES_RAW_PATH="$RPMTOPDIR"/BUILD/kernel-*/linux-"${ARCHVERSION%.*}"*"${ARCHVERSION##*.}"
+		SOURCES_PATH="$(readlink -f ${SOURCES_RAW_PATH})"
+		if [[ ! -d "${SOURCES_PATH}" ]]; then
+			SOURCES_RAW_PATH="$RPMTOPDIR"/BUILD/kernel-*/linux-"${ARCHVERSION%.v[zl]*}"*"${ARCHVERSION##*.v[zl]}"
+			SOURCES_PATH="$(readlink -f ${SOURCES_RAW_PATH})"
+		fi
+		mv "$SOURCES_PATH" "$SRCDIR" 2>&1 | logger || die
 		rm -rf "$RPMTOPDIR"
 		rm -rf "$SRCDIR/.git"
 
