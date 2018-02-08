@@ -30,9 +30,9 @@ POST_ENABLE_WAIT=5	# seconds
 POST_SIGNAL_WAIT=60	# seconds
 
 # How many times to try loading the patch if activeness safety check fails.
-MAX_LOAD_ATTEMPTS=5
+MAX_LOAD_ATTEMPTS=16
 # How long to wait before retry, in seconds.
-RETRY_INTERVAL=2
+RETRY_INTERVAL=10
 
 usage_cmd() {
 	printf '   %-20s\n      %s\n' "$1" "$2" >&2
