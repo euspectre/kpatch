@@ -67,8 +67,29 @@ warn() {
 	echo "kpatch: $*" >&2
 }
 
+LOG_FILE=/var/log/kpatch.log
+LOG_KERNEL=$(uname -r)
+LOG_EVENT=""
+LOG_PATCH=""
+
+log_event() {
+	result="$1"
+	message="$2"
+
+	[[ -n "$message" ]] && message=" $message"
+
+	datetime=$(date --iso-8601=seconds)
+	echo "$datetime $LOG_EVENT $LOG_PATCH $LOG_KERNEL $result$message" >> "$LOG_FILE"
+}
+
+log_success() {
+	log_event "SUCCESS" ""
+}
+
 die() {
 	warn "$@"
+	[[ -n "$LOG_EVENT" ]] && log_event "FAIL" "$*"
+
 	exit 1
 }
 
@@ -280,6 +301,11 @@ wait_for_patch_transition() {
 }
 
 load_module () {
+	local log_event_prev="$LOG_EVENT"
+	LOG_EVENT="LOAD"
+	[[ t"$2" == "treplace=1" ]] && LOG_EVENT="REPLACE"
+	LOG_PATCH="$(get_module_name $1)"
+
 	local module="$1"
 	local module_param="$2"
 
@@ -311,6 +337,7 @@ load_module () {
 					wait_for_patch_transition "$modname"
 					die "error: failed to re-enable module $modname (transition stalled), patch disabled"
 				fi
+				LOG_EVENT="$log_event_prev"
 				return
 			else
 				die "error: cannot re-enable patch module $modname, cannot verify checksum match"
@@ -347,6 +374,8 @@ load_module () {
 		die "error: failed to load module $modname (transition stalled)"
 	fi
 
+	log_success
+	LOG_EVENT="$log_event_prev"
 	return 0
 }
 
@@ -387,12 +416,24 @@ disable_patch () {
 unload_module () {
 	PATCH="${1//-/_}"
 	PATCH="${PATCH%.ko}"
+
+	local log_event_prev="$LOG_EVENT"
+	LOG_EVENT="UNLOAD"
+	LOG_PATCH="$PATCH"
+
 	disable_patch "$PATCH"
 
 	echo "unloading patch module: $PATCH"
 	# ignore any error here because rmmod can fail if the module used
 	# KPATCH_FORCE_UNSAFE.
-	rmmod "$PATCH" 2> /dev/null || return 0
+	if rmmod "$PATCH" 2> /dev/null; then
+		log_success
+	else
+		log_event "FAIL" "Failed to unload $PATCH."
+	fi
+
+	LOG_EVENT="$log_event_prev"
+	return 0
 }
 
 unload_disabled_modules() {
