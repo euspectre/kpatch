@@ -52,6 +52,10 @@
 #define HAVE_IMMEDIATE
 #endif
 
+static bool replace;
+module_param(replace, bool, S_IRUGO);
+MODULE_PARM_DESC(replace, "replace all previously loaded patch modules");
+
 /*
  * There are quite a few similar structures at play in this file:
  * - livepatch.h structs prefixed with klp_*
@@ -264,6 +268,8 @@ static int __init patch_init(void)
 #if defined(__powerpc__) && defined(HAVE_IMMEDIATE)
 	lpatch->immediate = true;
 #endif
+
+	lpatch->replace = replace;
 
 	i = 0;
 	list_for_each_entry(object, &patch_objects, list) {
