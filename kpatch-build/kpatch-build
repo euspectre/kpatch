@@ -759,12 +759,7 @@ if [[ -z "$MODNAME" ]] ; then
 		MODNAME="patch"
 	fi
 
-	if "$KPATCH_MODULE"; then
-		MODNAME="kpatch-$MODNAME"
-	else
-		MODNAME="livepatch-$MODNAME"
-	fi
-
+	MODNAME="kpatch-$MODNAME"
 	MODNAME="$(module_name_string "$MODNAME")"
 fi
 FILES="$(cat "$TEMPDIR/changed_objs")"
