@@ -436,8 +436,97 @@ unload_module () {
 	return 0
 }
 
+is_cumulative_patch() {
+	echo "$1" | grep -q -E '^kpatch_cumulative_[0-9_]+_r[0-9]+$'
+}
+
+is_enabled() {
+	[[ -f "$SYSFS/$1/enabled" ]] && [[ $(cat "$SYSFS/$1/enabled") -ne 0 ]]
+}
+
+# $1 >= $2
+version_gte() {
+	[  "$1" = "$(echo -e "$1\n$2" | sort -rV | head -n1)" ]
+}
+
+# (version, release) of $1 >= (version, release) of $2
+verrel_gte() {
+	VER_EXPR='s/^kpatch_cumulative_([0-9_]+)_r[0-9]+$/\1/;s/_/./g'
+	REL_EXPR='s/^kpatch_cumulative_[0-9_]+_r([0-9]+)$/\1/'
+
+	local ver1=$(echo $1 | sed -r "$VER_EXPR")
+	local rel1=$(echo $1 | sed -r "$REL_EXPR")
+	local ver2=$(echo $2 | sed -r "$VER_EXPR")
+	local rel2=$(echo $2 | sed -r "$REL_EXPR")
+
+	if [[ "$ver1" == $ver2 ]]; then
+		[[ $rel1 -ge $rel2 ]]
+	else
+		version_gte $ver1 $ver2
+	fi
+}
+
+
+replace_module () {
+	local new_module="$1"
+	local modname="$(get_module_name "$1")"
+	local bname=""
+
+	local log_event_prev="$LOG_EVENT"
+	LOG_EVENT="REPLACE"
+	LOG_PATCH="$modname"
+
+	is_enabled "$modname" && die "module $modname is already loaded and enabled"
+
+	if ! is_cumulative_patch "$modname"; then
+		# Trying to load a patch which is not an official cumulative
+		# patch. One cannot be sure the patch will play nicely with
+		# the callbacks defined in the currently loaded patches,
+		# so atomic replace is not used here. Instead, disable all
+		# the loaded patches first and then load the new one.
+		# If loading fails, the previously loaded patches will
+		# remain disabled. Not very good but acceptable: the new
+		# patch is not official anyway.
+		for module in "$SYSFS"/*; do
+			bname=$(basename $module)
+			if is_enabled "$bname"; then
+				disable_patch "$bname" || die "failed to disable $bname"
+			fi
+		done
+		load_module "$new_module" || die "failed to load module $PATCH"
+		LOG_EVENT="$log_event_prev"
+		return
+	fi
+
+	# Trying to load an official cumulative patch. Disable all
+	# non-official and non-cumulative patches first for the same
+	# reasons: we cannot tell if the callbacks from the patches clash.
+	# Same for the loaded official cumulative patches that have a higher
+	# version than this one (i.e., handle downgrade).
+	#
+	# Again, if loading of the patch fails after this, the previously
+	# loaded patches may remain disabled except for the earlier versions
+	# of the official cumulative patches. Not ideal but OK.
+	for module in "$SYSFS"/*; do
+		bname=$(basename $module)
+		if is_cumulative_patch "$bname"; then
+			if verrel_gte "$bname" "$modname" && is_enabled "$bname"; then
+				disable_patch "$bname" || die "failed to disable $bname"
+			fi
+			continue
+		fi
+
+		if is_enabled "$bname"; then
+			disable_patch "$bname" || die "failed to disable $bname"
+		fi
+	done
+
+	load_module "$new_module" replace=1 || die "failed to load module $PATCH"
+	LOG_EVENT="$log_event_prev"
+}
+
 unload_disabled_modules() {
-	for module in /sys/kernel/kpatch/patches/*; do
+	for module in "$SYSFS"/*; do
 		if [[ $(cat $module/enabled) -eq 0 ]]; then
 			unload_module $(basename $module) || die "failed to unload $module"
 		fi
@@ -479,7 +568,7 @@ case "$1" in
 	[[ "$#" -ne 2 ]] && usage
 	PATCH="$2"
 	find_module "$PATCH" || die "can't find $PATCH"
-	load_module "$MODULE" replace=1 || die "failed to load module $PATCH"
+	replace_module "$MODULE"
 	unload_disabled_modules || die "failed to unload old modules"
 	;;
 
