@@ -30,7 +30,7 @@
 
 /* Support for livepatch callback hooks */
 #if IS_ENABLED(CONFIG_LIVEPATCH)
-# if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+# if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #  define HAS_LIVEPATCH_HOOKS
 # endif
 #endif
