@@ -521,6 +521,10 @@ replace_module () {
 		fi
 	done
 
+	# Replacement of binary patches fails if loaded but disabled patches
+	# are present. https://lkml.org/lkml/2018/3/5/229
+	unload_disabled_modules
+
 	load_module "$new_module" replace=1 || die "failed to load module $PATCH"
 	LOG_EVENT="$log_event_prev"
 }
