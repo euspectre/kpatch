@@ -219,6 +219,7 @@ get_transition_patch() {
 	local module
 	local modname
 	for module in "$SYSFS"/*; do
+		[[ -e "$module" ]] || continue
 		modname=$(basename "$module")
 		if in_transition "$modname" ; then
 			echo "$modname"
@@ -488,6 +489,7 @@ replace_module () {
 		# remain disabled. Not very good but acceptable: the new
 		# patch is not official anyway.
 		for module in "$SYSFS"/*; do
+			[[ -e "$module" ]] || continue
 			bname=$(basename $module)
 			if is_enabled "$bname"; then
 				disable_patch "$bname" || die "failed to disable $bname"
@@ -508,6 +510,7 @@ replace_module () {
 	# loaded patches may remain disabled except for the earlier versions
 	# of the official cumulative patches. Not ideal but OK.
 	for module in "$SYSFS"/*; do
+		[[ -e "$module" ]] || continue
 		bname=$(basename $module)
 		if is_cumulative_patch "$bname"; then
 			if verrel_gte "$bname" "$modname" && is_enabled "$bname"; then
@@ -531,6 +534,7 @@ replace_module () {
 
 unload_disabled_modules() {
 	for module in "$SYSFS"/*; do
+		[[ -e "$module" ]] || continue
 		if [[ $(cat $module/enabled) -eq 0 ]]; then
 			unload_module $(basename $module) || die "failed to unload $module"
 		fi
