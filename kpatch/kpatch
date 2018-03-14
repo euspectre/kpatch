@@ -55,7 +55,7 @@ usage () {
 	echo >&2
 	usage_cmd "info <module>" "show information about a patch module"
 	echo >&2
-	usage_cmd "list" "list installed patch modules"
+	usage_cmd "list [-s|--show-state]" "list loaded and installed patch modules, with '-s' - show patch state as well"
 	echo >&2
 	usage_cmd "signal" "signal/poke any process stalling the current patch transition"
 	echo >&2
@@ -669,7 +669,13 @@ case "$1" in
 	;;
 
 "list")
-	[[ "$#" -ne 1 ]] && usage
+	[[ "$#" -gt 2 ]] && usage
+	SHOW_STATE=""
+	case "$2" in
+	-s|--show-state)
+		SHOW_STATE="yes"
+		;;
+	esac
 	echo "Loaded patch modules:"
 	for module in "$SYSFS"/*; do
 		if [[ -e "$module" ]]; then
@@ -681,10 +687,14 @@ case "$1" in
 				in_transition "$modname" && state="disabling..." \
 							 || state="disabled"
 			fi
-			echo "$modname [$state]"
+			if [[ -n "$SHOW_STATE" ]]; then
+				echo "$modname [$state]"
+			else
+				echo "$modname"
+			fi
 		fi
 	done
-	show_stalled_processes
+	[[ -n "$SHOW_STATE" ]] && show_stalled_processes
 	echo ""
 	echo "Installed patch modules:"
 	for kdir in "$INSTALLDIR"/*; do
