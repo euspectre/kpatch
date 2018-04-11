@@ -23,6 +23,7 @@
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/kallsyms.h>
+#include <linux/rcupdate.h>
 #include "kpatch.h"
 #include "kpatch-patch.h"
 
@@ -55,6 +56,18 @@ static ssize_t patch_enabled_store(struct kobject *kobj,
 	ret = kstrtoul(buf, 10, &val);
 	if (ret)
 		return ret;
+
+	/*
+	 * Make it more likely that RCU callbacks finish before we apply
+	 * or remove the patch. The small race window remains though
+	 * between the end of the barrier and the activeness safety check
+	 * in register/unregister, when new RCU callbacks can be scheduled.
+	 *
+	 * Anyway, this should make it less likely that the system will
+	 * execute an original variant of some function and a patched
+	 * callback it sets or vice versa.
+	 */
+	rcu_barrier();
 
 	val = !!val;
 
@@ -364,6 +377,7 @@ static int __init patch_init(void)
 	if (ret)
 		goto err_objects;
 
+	rcu_barrier();
 	ret = kpatch_register(&kpmod, replace);
 	if (ret)
 		goto err_objects;
