@@ -2391,6 +2391,7 @@ static int may_need_dynrela(const struct rela *rela)
 	 * unlikely to be used as callbacks.
 	 */
 	return (function_ptr_rela(rela) &&
+		toc_rela(rela)->sym->status != NEW &&
 		!strchr(toc_rela(rela)->sym->name, '.'));
 }
 
