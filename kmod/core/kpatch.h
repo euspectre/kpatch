@@ -96,8 +96,30 @@ extern struct kobject *kpatch_root_kobj;
 extern int kpatch_register(struct kpatch_module *kpmod, bool replace);
 extern int kpatch_unregister(struct kpatch_module *kpmod);
 
+/*
+ * A destructor function of this type can be provided when freeing the
+ * shadow variables.
+ *
+ * 'obj' - the object the shadow variable is attached to;
+ * 'shadow_data' - the data contained in the shadow_variable, as
+ *   kpatch_shadow_get() would return.
+ *
+ * Be careful not to call any new or patched kernel functions from the dtor
+ * if these functions use shadow variables themselves. The dtor may be
+ * called under the same lock as kpatch_shadow_*() functions use to operate
+ * on the shadow variables. Deadlocks are possible in such situations.
+ *
+ * It is up to the caller of kpatch_shadow_free*() to make sure the shadow
+ * variables cannot be accessed after they have been freed or in parallel to
+ * freeing.
+ */
+typedef void (*kpatch_shadow_dtor_t)(void *obj, void *shadow_data);
+
 extern void *kpatch_shadow_alloc(void *obj, char *var, size_t size, gfp_t gfp);
 extern void kpatch_shadow_free(void *obj, char *var);
+extern void kpatch_shadow_free_with_dtor(void *obj, char *var,
+					 kpatch_shadow_dtor_t dtor);
+extern void kpatch_shadow_free_all(char *var, kpatch_shadow_dtor_t dtor);
 extern void *kpatch_shadow_get(void *obj, char *var);
 
 #endif /* _KPATCH_H_ */

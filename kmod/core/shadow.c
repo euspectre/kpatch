@@ -40,6 +40,11 @@
  * To free it:
  *
  * kpatch_shadow_free(tsk, "newpid");
+ *
+ * To free all "newpid" variables (may be convenient, esp. when unloading the
+ * patch):
+ *
+ * kpatch_shadow_free_all("newpid", NULL);
  */
 
 #include <linux/hashtable.h>
@@ -130,7 +135,39 @@ static void kpatch_shadow_rcu_free(struct rcu_head *head)
 	kfree(shadow);
 }
 
+/*
+ * Could move this to kpatch.h and make it static inline, but it is needed
+ * to keep the ABI of the core module backward compatible.
+ */
 void kpatch_shadow_free(void *obj, char *var)
+{
+	kpatch_shadow_free_with_dtor(obj, var, NULL);
+}
+EXPORT_SYMBOL_GPL(kpatch_shadow_free);
+
+static void kpatch_call_dtor(struct kpatch_shadow *shadow,
+			     kpatch_shadow_dtor_t dtor)
+{
+	void *data;
+
+	if (!dtor)
+		return;
+
+	data = (shadow_is_inplace(shadow)) ? &(shadow->data) : shadow->data;
+	dtor(shadow->obj, data);
+}
+
+/*
+ * Detach and free <obj, var> shadow variable.
+ *
+ * dtor: custom callback that can be used to unregister the variable
+ *       and/or free data that the shadow variable points to (optional)
+ *
+ * The caller must make sure the variable cannot be accessed by other
+ * threads after this function has started.
+ */
+void kpatch_shadow_free_with_dtor(void *obj, char *var,
+				  kpatch_shadow_dtor_t dtor)
 {
 	unsigned long flags;
 	struct kpatch_shadow *shadow;
@@ -141,6 +178,7 @@ void kpatch_shadow_free(void *obj, char *var)
 			       (unsigned long)obj) {
 		if (shadow->obj == obj && !strcmp(shadow_var(shadow), var)) {
 			hash_del_rcu(&shadow->node);
+			kpatch_call_dtor(shadow, dtor);
 			spin_unlock_irqrestore(&kpatch_shadow_lock, flags);
 			call_rcu(&shadow->rcu_head, kpatch_shadow_rcu_free);
 			return;
@@ -149,7 +187,35 @@ void kpatch_shadow_free(void *obj, char *var)
 
 	spin_unlock_irqrestore(&kpatch_shadow_lock, flags);
 }
-EXPORT_SYMBOL_GPL(kpatch_shadow_free);
+EXPORT_SYMBOL_GPL(kpatch_shadow_free_with_dtor);
+
+/*
+ * Detach and free all <*, var> shadow variables.
+ *
+ * dtor - same as in kpatch_shadow_free_with_dtor().
+ *
+ * The caller must make sure the variables cannot be accessed by other
+ * threads after this function has started.
+ */
+void kpatch_shadow_free_all(char *var, kpatch_shadow_dtor_t dtor)
+{
+	unsigned long flags;
+	struct kpatch_shadow *shadow;
+	int i;
+
+	spin_lock_irqsave(&kpatch_shadow_lock, flags);
+
+	hash_for_each(kpatch_shadow_hash, i, shadow, node) {
+		if (!strcmp(shadow_var(shadow), var)) {
+			hash_del_rcu(&shadow->node);
+			kpatch_call_dtor(shadow, dtor);
+			call_rcu(&shadow->rcu_head, kpatch_shadow_rcu_free);
+		}
+	}
+
+	spin_unlock_irqrestore(&kpatch_shadow_lock, flags);
+}
+EXPORT_SYMBOL_GPL(kpatch_shadow_free_all);
 
 void *kpatch_shadow_get(void *obj, char *var)
 {
