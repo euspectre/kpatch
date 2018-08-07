@@ -34,6 +34,9 @@ MAX_LOAD_ATTEMPTS=16
 # How long to wait before retry, in seconds.
 RETRY_INTERVAL=10
 
+# A reasonable default value for $SYSFS.
+SYSFS="/sys/kernel/livepatch"
+
 usage_cmd() {
 	printf '   %-20s\n      %s\n' "$1" "$2" >&2
 }
@@ -156,19 +159,17 @@ get_module_name () {
 }
 
 init_sysfs_var() {
-	# If the kernel is configured with CONFIG_LIVEPATCH, use that.
-	# Otherwise, use the kpatch core module (kpatch.ko).
-	if [[ -e /sys/kernel/livepatch ]] ; then
-		# livepatch ABI
-		SYSFS="/sys/kernel/livepatch"
-
-	elif [[ -e /sys/kernel/kpatch/patches ]] ; then
+	# If the kpatch core module (kpatch.ko) is available, use it.
+	# Then check if livepatch is supported.
+	if [[ -e /sys/kernel/kpatch/patches ]] ; then
 		# kpatch pre-0.4 ABI
 		SYSFS="/sys/kernel/kpatch/patches"
-
-	else
-		# kpatch 0.4 ABI
+	elif [[ -e /sys/kernel/kpatch ]] ; then
+		# kpatch 0.4+ ABI
 		SYSFS="/sys/kernel/kpatch"
+	elif [[ -e /sys/kernel/livepatch ]] ; then
+		# livepatch ABI
+		SYSFS="/sys/kernel/livepatch"
 	fi
 }
 
@@ -310,14 +311,12 @@ load_module () {
 	local module="$1"
 	local module_param="$2"
 
+	modprobe -q kpatch && echo "loaded core module"
+
 	if ! core_loaded; then
-		if modprobe -q kpatch; then
-			echo "loaded core module"
-		else
-			find_core_module || die "can't find core module"
-			echo "loading core module: $COREMOD"
-			insmod "$COREMOD" || die "failed to load core module"
-		fi
+		find_core_module || die "can't find core module"
+		echo "loading core module: $COREMOD"
+		insmod "$COREMOD" || die "failed to load core module"
 
 		# Now that the core module has been loaded, set $SYSFS to the
 		# correct value based on the loaded core module's ABI.
