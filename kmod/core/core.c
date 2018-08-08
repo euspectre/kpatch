@@ -63,6 +63,10 @@
 #error "CONFIG_FUNCTION_TRACER, CONFIG_HAVE_FENTRY, CONFIG_MODULES, CONFIG_SYSFS, CONFIG_KALLSYMS_ALL kernel config options are required"
 #endif
 
+static int enable = 1;
+module_param(enable, int, S_IRUGO);
+MODULE_PARM_DESC(enable, "this parameter is ignored but should be present in case modprobe passes enable=0");
+
 /* A limited fault injection support, for testing */
 static struct dentry *debugfs_dir_dentry = NULL;
 static const char *debugfs_dir_name = "kpatch";
