@@ -22,6 +22,7 @@ KBUILD_CFLAGS_MODULE += -mcmodel=large
 endif
 
 obj-m += $(KPATCH_NAME).o
+ldflags-y += -T $(src)/kpatch.lds
 
 KPATCH_PATCH_FORMAT ?= "default"
 ifeq ("$(KPATCH_PATCH_FORMAT)", "kpatch")
