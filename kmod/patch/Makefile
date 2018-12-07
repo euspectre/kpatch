@@ -23,6 +23,7 @@ endif
 
 obj-m += $(KPATCH_NAME).o
 ldflags-y += -T $(src)/kpatch.lds
+extra-y := kpatch.lds
 
 KPATCH_PATCH_FORMAT ?= "default"
 ifeq ("$(KPATCH_PATCH_FORMAT)", "kpatch")
@@ -31,14 +32,14 @@ else
 	KPATCH_HOOK_OBJ := patch-hook.o
 endif
 
-$(KPATCH_NAME)-objs += $(KPATCH_HOOK_OBJ) kpatch.lds output.o
+$(KPATCH_NAME)-objs += $(KPATCH_HOOK_OBJ) output.o
 
 all: $(KPATCH_NAME).ko
 
 $(KPATCH_NAME).ko:
 	@echo Building module with Kpatch ABI \"$(KPATCH_ABI_COMPATIBLE)\".
 	$(PRE_BUILD)
-	$(KPATCH_MAKE) $(KPATCH_NAME).ko
+	$(KPATCH_MAKE)
 	$(POST_BUILD)
 
 patch-hook.o: patch-hook.c kpatch-patch-hook.c livepatch-patch-hook.c
