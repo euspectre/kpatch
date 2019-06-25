@@ -558,8 +558,21 @@ case "$1" in
 	[[ "$#" -ne 2 ]] && usage
 	case "$2" in
 	"--all")
-		for i in "$INSTALLDIR/$(uname -r)"/*.ko; do
+		INSTALLDIR_KVER="$INSTALLDIR/$(uname -r)"
+		NR_CUMUL=$(ls -1 "$INSTALLDIR_KVER"/kpatch*cumulative*.ko 2>/dev/null | wc -l)
+		[[ $NR_CUMUL -gt 1 ]] && warn "warning: $NR_CUMUL cumulative patches are installed for $(uname -r)"
+
+		# Load the cumulative patch first if present, pick the one
+		# with the greatest version if there are 2 or more.
+		if [[ $NR_CUMUL -gt 0 ]]; then
+			CUMUL_PATCH=$(ls -1 "$INSTALLDIR_KVER"/kpatch*cumulative*.ko 2>/dev/null | sort -Vr | head -n 1)
+			[[ -z "$CUMUL_PATCH" ]] && die "expected a cumulative patch for $(uname -r) but it is missing."
+			load_module "$CUMUL_PATCH" || die "failed to load module $CUMUL_PATCH"
+		fi
+
+		for i in "$INSTALLDIR_KVER"/*.ko; do
 			[[ -e "$i" ]] || continue
+			[[ "$i" =~ kpatch.*cumulative.*\.ko ]] && continue
 			load_module "$i" || die "failed to load module $i"
 		done
 		;;
