@@ -224,7 +224,8 @@ static inline int kpatch_compare_addresses(unsigned long stack_addr,
 }
 
 static int kpatch_backtrace_address_verify(struct kpatch_module *kpmod,
-					   unsigned long address)
+					   unsigned long address,
+					   bool replace)
 {
 	struct kpatch_func *func;
 	int i;
@@ -259,8 +260,11 @@ static int kpatch_backtrace_address_verify(struct kpatch_module *kpmod,
 	} while_for_each_linked_func();
 
 	/* in the replace case, need to check the func hash as well */
-	hash_for_each_rcu(kpatch_func_hash, i, func, node) {
-		if (func->op == KPATCH_OP_UNPATCH && !func->force) {
+	if (replace) {
+		hash_for_each_rcu(kpatch_func_hash, i, func, node) {
+			if (func->op != KPATCH_OP_UNPATCH || func->force)
+				continue;
+
 			ret = kpatch_compare_addresses(address,
 						       func->new_addr,
 						       func->new_size,
@@ -279,7 +283,8 @@ static int kpatch_backtrace_address_verify(struct kpatch_module *kpmod,
  *
  * This function is called from stop_machine() context.
  */
-static int kpatch_verify_activeness_safety(struct kpatch_module *kpmod)
+static int kpatch_verify_activeness_safety(struct kpatch_module *kpmod,
+					   bool replace)
 {
 	struct task_struct *g, *t;
 	int i;
@@ -301,7 +306,8 @@ static int kpatch_verify_activeness_safety(struct kpatch_module *kpmod)
 			if (trace.entries[i] == ULONG_MAX)
 				break;
 			ret = kpatch_backtrace_address_verify(kpmod,
-							      trace.entries[i]);
+							      trace.entries[i],
+							      replace);
 			if (ret)
 				goto out;
 		}
@@ -337,7 +343,7 @@ static int kpatch_apply_patch(void *data)
 
 	kpmod = args->kpmod;
 
-	ret = kpatch_verify_activeness_safety(kpmod);
+	ret = kpatch_verify_activeness_safety(kpmod, args->replace);
 	/* for testing */
 	if (fail_apply)
 		ret = -EBUSY;
@@ -405,7 +411,7 @@ static int kpatch_remove_patch(void *data)
 	struct kpatch_object *object;
 	int ret;
 
-	ret = kpatch_verify_activeness_safety(kpmod);
+	ret = kpatch_verify_activeness_safety(kpmod, false);
 	if (fail_remove)
 		ret = -EBUSY;
 
