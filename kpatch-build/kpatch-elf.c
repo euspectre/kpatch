@@ -194,7 +194,7 @@ void kpatch_create_rela_list(struct kpatch_elf *kelf, struct section *sec)
 		    (rela->sym->sec->sh.sh_flags & SHF_STRINGS)) {
 			rela->string = rela->sym->sec->data->d_buf + rela->addend;
 			if (!rela->string)
-				ERROR("could not lookup rela string for %s+%d",
+				ERROR("could not lookup rela string for %s+%ld",
 				      rela->sym->name, rela->addend);
 		}
 

@@ -289,7 +289,7 @@ static int rela_equal(struct rela *rela1, struct rela *rela2)
 
 		r_toc_relasec1 = find_rela_by_offset(toc_relasec1, rela1->addend);
 		if (!r_toc_relasec1)
-			ERROR(".toc entry not found %s + %x", rela1->sym->name, rela1->addend);
+			ERROR(".toc entry not found %s + %lx", rela1->sym->name, rela1->addend);
 
 		toc_relasec2 = rela2->sym->sec->rela;
 		if (!toc_relasec2)
@@ -297,7 +297,7 @@ static int rela_equal(struct rela *rela1, struct rela *rela2)
 
 		r_toc_relasec2 = find_rela_by_offset(toc_relasec2, rela2->addend);
 		if (!r_toc_relasec2)
-			ERROR(".toc entry not found %s + %x", rela2->sym->name, rela2->addend);
+			ERROR(".toc entry not found %s + %lx", rela2->sym->name, rela2->addend);
 
 		if (r_toc_relasec1->string)
 			return r_toc_relasec2->string &&
@@ -1206,7 +1206,7 @@ static void kpatch_replace_sections_syms(struct kpatch_elf *kelf)
 					   rela->addend + add_off >= end)
 					continue;
 
-				log_debug("%s: replacing %s+%d reference with %s+%d\n",
+				log_debug("%s: replacing %s+%ld reference with %s+%ld\n",
 					  sec->name,
 					  rela->sym->name, rela->addend,
 					  sym->name, rela->addend - start);
@@ -1908,7 +1908,7 @@ static void kpatch_regenerate_special_section(struct kpatch_elf *kelf,
 				ERROR("BUG: __jump_table has an unexpected format");
 
 			if (strncmp(key->sym->name, "__tracepoint_", 13))
-				ERROR("Found a jump label at %s+0x%x, key: %s.  Jump labels aren't currently supported.  Use static_key_enabled() instead.\n",
+				ERROR("Found a jump label at %s+0x%lx, key: %s.  Jump labels aren't currently supported.  Use static_key_enabled() instead.\n",
 				      code->sym->name, code->addend, key->sym->name);
 
 			continue;

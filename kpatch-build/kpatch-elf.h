@@ -88,8 +88,8 @@ struct rela {
 	GElf_Rela rela;
 	struct symbol *sym;
 	unsigned int type;
-	int addend;
 	int offset;
+	long addend;
 	char *string;
 	bool need_dynrela;
 };
