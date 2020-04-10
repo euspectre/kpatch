@@ -1837,6 +1837,7 @@ static void kpatch_regenerate_special_section(struct kpatch_elf *kelf,
 	char *src, *dest;
 	int group_size, src_offset, dest_offset, include;
 	int jump_table = !strcmp(special->name, "__jump_table");
+	int jump_labels_found = 0;
 
 	LIST_HEAD(newrelas);
 
@@ -1907,9 +1908,11 @@ static void kpatch_regenerate_special_section(struct kpatch_elf *kelf,
 			if (i != 3)
 				ERROR("BUG: __jump_table has an unexpected format");
 
-			if (strncmp(key->sym->name, "__tracepoint_", 13))
-				ERROR("Found a jump label at %s+0x%lx, key: %s.  Jump labels aren't currently supported.  Use static_key_enabled() instead.\n",
+			if (strncmp(key->sym->name, "__tracepoint_", 13)) {
+				jump_labels_found++;
+				log_normal("Found a jump label at %s+0x%lx, key: %s.\n",
 				      code->sym->name, code->addend, key->sym->name);
+			}
 
 			continue;
 		}
@@ -1944,6 +1947,10 @@ static void kpatch_regenerate_special_section(struct kpatch_elf *kelf,
 		memcpy(dest + dest_offset, src + src_offset, group_size);
 		dest_offset += group_size;
 	}
+
+	if (jump_labels_found)
+		ERROR("Found %d jump label(s) in the patched code. Jump labels aren't currently supported. Use static_key_enabled() instead.\n",
+		      jump_labels_found);
 
 	if (!dest_offset) {
 		/* no changed or global functions referenced */
