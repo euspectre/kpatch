@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/kallsyms.h>
 #include <linux/rcupdate.h>
+#include <linux/version.h>
 #include "kpatch.h"
 #include "kpatch-patch.h"
 
@@ -355,6 +356,7 @@ static int patch_make_hook_lists(struct list_head *objects)
 static int __init patch_init(void)
 {
 	int ret;
+	void *core_addr;
 
 	ret = kobject_init_and_add(&kpmod.kobj, &patch_ktype,
 				   kpatch_root_kobj, "%s",
@@ -382,6 +384,12 @@ static int __init patch_init(void)
 	if (ret)
 		goto err_objects;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+	core_addr = kpmod.mod->core_layout.base;
+#else
+	core_addr = kpmod.mod->module_core;
+#endif
+	pr_info("base address of the patch module: %pK\n", core_addr);
 	return 0;
 
 err_objects:
