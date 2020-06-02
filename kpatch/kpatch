@@ -53,6 +53,7 @@ usage () {
 	usage_cmd "load --all" "load all installed patch modules into the running kernel"
 	usage_cmd "load <module>" "load patch module into the running kernel"
 	usage_cmd "replace <module>" "load patch module into the running kernel, replacing all other modules"
+	usage_cmd "replace-with-installed" "load the installed patch module, replacing all other modules"
 	usage_cmd "unload --all" "unload all patch modules from the running kernel"
 	usage_cmd "unload <module>" "unload patch module from the running kernel"
 	echo >&2
@@ -129,6 +130,18 @@ find_module () {
 	fi
 
 	return 1
+}
+
+find_installed_module () {
+	INSTALLDIR_KVER="$INSTALLDIR/$(uname -r)"
+	nr_installed=$(ls -1 "$INSTALLDIR_KVER"/*.ko 2>/dev/null | wc -l)
+	if [[ $nr_installed -ne 1 ]]; then
+		die "expected a single patch module installed for $(uname -r), found: $nr_installed"
+	fi
+
+	for MODULE in "$INSTALLDIR_KVER"/*.ko; do
+		[[ -f "$MODULE" ]] && break
+	done
 }
 
 find_core_module() {
@@ -588,6 +601,13 @@ case "$1" in
 	[[ "$#" -ne 2 ]] && usage
 	PATCH="$2"
 	find_module "$PATCH" || die "can't find $PATCH"
+	replace_module "$MODULE"
+	unload_disabled_modules || die "failed to unload old modules"
+	;;
+
+"replace-with-installed")
+	[[ "$#" -ne 1 ]] && usage
+	find_installed_module
 	replace_module "$MODULE"
 	unload_disabled_modules || die "failed to unload old modules"
 	;;
